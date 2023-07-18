@@ -12,23 +12,30 @@ import SpreadsheetView
 class SpreadsheetDataItem {
     private var _value: String
     
+    private(set) var isUpdate: Bool = false
+    
     var value: String {
         get { return _value }
         set {
             _value = newValue
-            valueSubject.send(newValue)
+            isUpdate = true
+            valueSubject.send(self)
         }
     }
     
-    private let valueSubject: CurrentValueSubject<String, Never>
+    var valuePublisher: AnyPublisher<SpreadsheetDataItem, Never> {
+        return valueSubject.eraseToAnyPublisher()
+    }
+    
+    private lazy var valueSubject: CurrentValueSubject<SpreadsheetDataItem, Never> = .init(self)
     
     init(value: String) {
         _value = value
-        valueSubject = .init(value)
+        isUpdate = false
     }
     
-    var valuePublisher: AnyPublisher<String, Never> {
-        return valueSubject.eraseToAnyPublisher()
+    public func markUpdated() {
+        isUpdate = false
     }
 }
 
@@ -61,7 +68,7 @@ class SpreadsheetViewController: UIViewController {
         view.addSubview(spreadsheetView)
         
         NSLayoutConstraint.activate([
-            spreadsheetView.topAnchor.constraint(equalTo: view.topAnchor),
+            spreadsheetView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
             spreadsheetView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             spreadsheetView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             spreadsheetView.bottomAnchor.constraint(equalTo: view.bottomAnchor)
@@ -70,7 +77,7 @@ class SpreadsheetViewController: UIViewController {
         var fakeItems: [[SpreadsheetDataItem]] = []
         
         // Generate two dimension fake SpreadsheetDataItems
-        for _ in 0..<5 {
+        for _ in 0..<4 {
             var rowItems: [SpreadsheetDataItem] = []
             for _ in 0..<100 {
                 let item = SpreadsheetDataItem(value: "0")
@@ -100,7 +107,6 @@ class SpreadsheetViewController: UIViewController {
                 let rowItems = self.viewModel.items.randomElement()!
                 let columnItems = rowItems.randomElement()!
                 columnItems.value = "\(newValue)"
-                
             }
             .store(in: &cancellables)
     }
@@ -158,11 +164,26 @@ class SpreadsheetCell: Cell, CellReusable {
     }
     
     func configure(with item: SpreadsheetDataItem) {
+        cancellables.removeAll()
         item.valuePublisher
-            .sink { [weak self] newValue in
-                self?.valueLabel.text = newValue
+            .sink { [weak self] item in
+                if item.isUpdate {
+                    self?.flashAnimation()
+                    item.markUpdated()
+                }
+                
+                self?.valueLabel.text = item.value
             }
             .store(in: &cancellables)
+    }
+    
+    private func flashAnimation() {
+        print("Flash...")
+        let flashAnimation = CABasicAnimation(keyPath: "backgroundColor")
+        flashAnimation.fromValue = UIColor.yellow.cgColor
+        flashAnimation.toValue = UIColor.clear.cgColor
+        flashAnimation.duration = 0.3
+        layer.add(flashAnimation, forKey: "flashAnimation")
     }
 }
 
