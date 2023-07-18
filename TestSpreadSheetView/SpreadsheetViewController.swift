@@ -9,6 +9,8 @@ import UIKit
 import Combine
 import SpreadsheetView
 
+let useDataBinding = true
+
 class SpreadsheetDataItem {
     private var _value: String
     
@@ -107,6 +109,10 @@ class SpreadsheetViewController: UIViewController {
                 let rowItems = self.viewModel.items.randomElement()!
                 let columnItems = rowItems.randomElement()!
                 columnItems.value = "\(newValue)"
+                
+                if !useDataBinding {
+                    self.spreadsheetView.reloadData()
+                }
             }
             .store(in: &cancellables)
     }
@@ -164,21 +170,28 @@ class SpreadsheetCell: Cell, CellReusable {
     }
     
     func configure(with item: SpreadsheetDataItem) {
-        cancellables.removeAll()
-        item.valuePublisher
-            .sink { [weak self] item in
-                if item.isUpdate {
-                    self?.flashAnimation()
-                    item.markUpdated()
-                }
-                
-                self?.valueLabel.text = item.value
+        if !useDataBinding {
+            valueLabel.text = item.value
+            if item.isUpdate {
+                flashAnimation()
+                item.markUpdated()
             }
-            .store(in: &cancellables)
+        } else {
+            cancellables.removeAll()
+            item.valuePublisher
+                .sink { [weak self] item in
+                    if item.isUpdate {
+                        self?.flashAnimation()
+                        item.markUpdated()
+                    }
+                    
+                    self?.valueLabel.text = item.value
+                }
+                .store(in: &cancellables)
+        }
     }
     
     private func flashAnimation() {
-        print("Flash...")
         let flashAnimation = CABasicAnimation(keyPath: "backgroundColor")
         flashAnimation.fromValue = UIColor.yellow.cgColor
         flashAnimation.toValue = UIColor.clear.cgColor
